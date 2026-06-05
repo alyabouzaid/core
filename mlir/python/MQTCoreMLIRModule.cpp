@@ -11,6 +11,7 @@
 #include "mlir-c/IR.h"
 #include "mlir/Bindings/Python/NanobindAdaptors.h" // NOLINT(misc-include-cleaner)
 #include "mlir/CAPI/Dialects.h"
+#include "mlir/Compiler/CompilerPipeline.h"
 #include "mlir/Conversion/QCToQCO/QCToQCO.h" // NOLINT(misc-include-cleaner)
 #include "mlir/Dialect/QC/Translation/TranslateQuantumComputationToQC.h" // NOLINT(misc-include-cleaner)
 #include "mlir/Support/Passes.h" // NOLINT(misc-include-cleaner)
@@ -33,10 +34,9 @@ NB_MODULE(_mqtCoreMlir, m) {
 
   m.doc() = "MQT Core MLIR Python bindings";
 
-  auto registerDialects = [](MlirContext context) {
-    mqtMlirRegisterAllDialects(context);
-  };
-  m.def("register_dialects", registerDialects, nb::arg("context"),
+  m.def("register_dialects",
+        [](MlirContext context) { mqtMlirRegisterAllDialects(context); },
+        nb::arg("context"),
         "Register and load QC, QCO, QTensor, and dependent MLIR dialects.");
 
   m.def(
@@ -66,5 +66,69 @@ NB_MODULE(_mqtCoreMlir, m) {
         return out;
       },
       nb::arg("qasm"),
-      "Run the full (py:qasm) -> (mlir:qc) -> (mlir:qco) pipeline.");
+      "Run the (QASM) -> (QC dialect) -> (QCO dialect) pipeline.");
+
+  m.def(
+      "compile_program",
+      [](const std::string& qasm, bool convertToQIR, bool recordIntermediates,
+         bool disableMergeSingleQubitRotationGates,
+         bool enableHadamardLifting) -> nb::object {
+        auto qc = qasm3::Importer::imports(qasm);
+
+        mlir::MLIRContext ctx;
+        MlirContext cCtx{&ctx};
+        mqtMlirRegisterAllDialects(cCtx);
+
+        auto module = mlir::translateQuantumComputationToQC(&ctx, qc);
+        if (!module) {
+          throw std::runtime_error("failed to translate circuit to QC MLIR");
+        }
+
+        mlir::QuantumCompilerConfig config;
+        config.convertToQIR = convertToQIR;
+        config.recordIntermediates = recordIntermediates;
+        config.disableMergeSingleQubitRotationGates =
+            disableMergeSingleQubitRotationGates;
+        config.enableHadamardLifting = enableHadamardLifting;
+
+        mlir::CompilationRecord record;
+        const mlir::QuantumCompilerPipeline pipeline(config);
+        if (mlir::failed(pipeline.runPipeline(
+                module.get(), recordIntermediates ? &record : nullptr))) {
+          throw std::runtime_error("compilation pipeline failed");
+        }
+
+        const std::string finalIR = mlir::captureIR(module.get());
+
+        if (!recordIntermediates) {
+          return nb::str(finalIR.c_str());
+        }
+
+        nb::dict result;
+        result["result"] = nb::str(finalIR.c_str());
+        result["after_qc_import"] = nb::str(record.afterQCImport.c_str());
+        result["after_initial_canon"] =
+            nb::str(record.afterInitialCanon.c_str());
+        result["after_qco_conversion"] =
+            nb::str(record.afterQCOConversion.c_str());
+        result["after_qco_canon"] = nb::str(record.afterQCOCanon.c_str());
+        result["after_optimization"] =
+            nb::str(record.afterOptimization.c_str());
+        result["after_optimization_canon"] =
+            nb::str(record.afterOptimizationCanon.c_str());
+        result["after_qc_conversion"] =
+            nb::str(record.afterQCConversion.c_str());
+        result["after_qc_canon"] = nb::str(record.afterQCCanon.c_str());
+        result["after_qir_conversion"] =
+            nb::str(record.afterQIRConversion.c_str());
+        result["after_qir_canon"] = nb::str(record.afterQIRCanon.c_str());
+        return result;
+      },
+      nb::arg("qasm"), nb::arg("convert_to_qir") = false,
+      nb::arg("record_intermediates") = false,
+      nb::arg("disable_merge_single_qubit_rotation_gates") = false,
+      nb::arg("enable_hadamard_lifting") = false,
+      "Run the full MQT compiler pipeline on a QASM string.\n\n"
+      "Returns the final IR as a string. When record_intermediates=True,\n"
+      "returns a dict mapping stage names to IR snapshots plus 'result'.");
 }

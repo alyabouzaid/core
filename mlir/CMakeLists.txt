@@ -40,9 +40,9 @@ add_subdirectory(include)
 add_subdirectory(lib)
 add_subdirectory(tools)
 
-if(BUILD_MQT_CORE_MLIR_PYTHON)
+if(BUILD_MQT_CORE_BINDINGS)
   if(NOT MLIR_ENABLE_BINDINGS_PYTHON)
-    message(FATAL_ERROR "BUILD_MQT_CORE_MLIR_PYTHON requires MLIR to be built with "
+    message(FATAL_ERROR "Building MQT MLIR Python bindings requires MLIR to be built with "
                         "MLIR_ENABLE_BINDINGS_PYTHON=ON. Re-build MLIR with that flag set.")
   endif()
   include(AddMLIRPython)

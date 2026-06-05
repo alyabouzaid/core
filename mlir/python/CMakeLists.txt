@@ -39,7 +39,8 @@ declare_mlir_python_extension(
   MLIRSupportMQT
   PRIVATE_LINK_LIBS
   LLVMSupport
-  MQT::CoreIR)
+  MQT::CoreIR
+  MQTCompilerPipeline)
 
 # ##################################################################################################
 # Aggregate and install

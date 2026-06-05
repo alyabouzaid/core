@@ -10,7 +10,13 @@
 
 from __future__ import annotations
 
-from ._mlir_libs._mqtCoreMlir import qasm_to_qco, register_dialects
+from ._mlir_libs._mqtCoreMlir import compile_program, qasm_to_qco, register_dialects
 from ._pipeline import compile_qc_to_qco, make_context
 
-__all__ = ["compile_qc_to_qco", "make_context", "qasm_to_qco", "register_dialects"]
+__all__ = [
+    "compile_program",
+    "compile_qc_to_qco",
+    "make_context",
+    "qasm_to_qco",
+    "register_dialects",
+]
